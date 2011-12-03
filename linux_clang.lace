@@ -7,7 +7,10 @@ if @build_tags.include?('debug')
 				trace "Compiling %s", make_relative(infile.path)
 				include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
 				defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
-				sh 'clang', '-Wall', '-Werror', include_dirs, defines, '-MMD', '-O0', '-g', '-c', '-o', outfile, infile.path
+				params = []
+				params << (infile.context.get_attribute_value(:allow_warnings) ? [] : '-Werror')
+				params << '-std=c++0x' if @project.global_context.get_attribute_value(:enable_cpp11)
+				sh 'clang', '-Wall', params, include_dirs, defines, '-MMD', '-O0', '-g', '-c', '-o', outfile, infile.path
 			end
 		end
 	end
@@ -34,9 +37,11 @@ else
 				trace "Compiling %s", make_relative(infile.path)
 				include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
 				defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
-				opt = []
-				opt = '-g' if tag('debug') === @project.build_tags
-				sh 'clang', '-emit-llvm', '-Wall', '-Werror', include_dirs, defines, '-MMD', opt, '-c', '-o', outfile, infile.path
+				params = []
+				params << (infile.context.get_attribute_value(:allow_warnings) ? [] : '-Werror')
+				params << '-std=c++0x' if @project.global_context.get_attribute_value(:enable_cpp11)
+				params << '-O2'
+				sh 'clang', '-emit-llvm', '-Wall', params, include_dirs, defines, '-MMD', '-g', '-c', '-o', outfile, infile.path
 				create_optimized_dependencies(dfile)
 			end
 		end
@@ -61,7 +66,7 @@ else
 			end
 			s_file = @output_path + 'linked.s'
 			trace 'compiling llvm file'
-			sh 'llc', '-f', opt, '-o', s_file, bc_file
+			sh 'llc', opt, '-o', s_file, bc_file
 			trace 'linking'
 			lib_dirs = @project.global_context.get_attribute_set(:lib_dir).map {|l| '-L' + l.path}
 			libs = @project.global_context.get_attribute_set(:libs).map {|l| '-l' + l }

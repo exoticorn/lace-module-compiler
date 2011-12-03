@@ -5,10 +5,11 @@ define_compiler(SingleFileCompiler, :input_pattern => tag('.cpp') | tag('.c'), :
 			trace "Compiling %s", make_relative(infile.path)
 			include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
 			defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
-			opt = []
-			opt = '-O2' unless tag('debug') === @project.build_tags
-			werror = infile.context.get_attribute_value(:allow_warnings) ? [] : '-Werror'
-			sh 'g++', '-Wall', werror, include_dirs, defines, '-MMD', opt, '-g', '-c', '-o', outfile, infile.path
+			params = []
+			params << '-O2' unless tag('debug') === @project.build_tags
+			params << (infile.context.get_attribute_value(:allow_warnings) ? [] : '-Werror')
+			params << '-std=c++0x' if @project.global_context.get_attribute_value(:enable_cpp11)
+			sh 'g++', '-Wall', include_dirs, defines, '-MMD', params, '-g', '-c', '-o', outfile, infile.path
 		end
 	end
 end
