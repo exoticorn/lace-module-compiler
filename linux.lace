@@ -22,6 +22,6 @@ define_compiler(MultiFileCompiler, :input_pattern => tag('.o'), :output_tag => '
 	def compile(infiles)
 		trace 'Linking'
 		libs = @project.global_context.get_attribute_set(:libs).map {|l| '-l' + l }
-		sh 'g++', '-g', libs, '-o', output_name, infiles.map {|f| f.path }
+		sh 'g++', '-g', '-o', output_name, infiles.map {|f| f.path }, libs
 	end
 end
