@@ -1,0 +1,7 @@
+case @project.build_tags
+when tag('clang')
+	import 'compiler/linux_clang.lace'
+else
+	import 'compiler/linux.lace'
+end
+

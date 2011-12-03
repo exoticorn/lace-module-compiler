@@ -1,0 +1,26 @@
+define_compiler(SingleFileCompiler, :input_pattern => tag('.cpp') | tag('.c'), :dependency_pattern => tag('.hpp') | tag('.h'),
+					:output_name => 'cpp_compiler/%.o') do
+	def compile(infile, outfile)
+		check_dependencies(infile.path.to_s, outfile.to_s.sub(/\.o/, '.d')) do
+			trace "Compiling %s", make_relative(infile.path)
+			include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
+			defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
+			opt = []
+			opt = '-O2' unless tag('debug') === @project.build_tags
+			werror = infile.context.get_attribute_value(:allow_warnings) ? [] : '-Werror'
+			sh 'g++', '-Wall', werror, include_dirs, defines, '-MMD', opt, '-g', '-c', '-o', outfile, infile.path
+		end
+	end
+end
+
+define_compiler(MultiFileCompiler, :input_pattern => tag('.o'), :output_tag => 'executable') do
+	def output_name
+		@output_path + @project.name
+	end
+
+	def compile(infiles)
+		trace 'Linking'
+		libs = @project.global_context.get_attribute_set(:libs).map {|l| '-l' + l }
+		sh 'g++', '-g', libs, '-o', output_name, infiles.map {|f| f.path }
+	end
+end

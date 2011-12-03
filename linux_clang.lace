@@ -1,0 +1,74 @@
+if @build_tags.include?('debug')
+
+	define_compiler(SingleFileCompiler, :input_pattern => tag('.cpp') | tag('.c'), :dependency_pattern => tag('.hpp') | tag('.h'),
+						:output_name => 'cpp_compiler/%.o') do
+		def compile(infile, outfile)
+			check_dependencies(infile.path.to_s, outfile.to_s.sub(/\.o/, '.d')) do
+				trace "Compiling %s", make_relative(infile.path)
+				include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
+				defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
+				sh 'clang', '-Wall', '-Werror', include_dirs, defines, '-MMD', '-O0', '-g', '-c', '-o', outfile, infile.path
+			end
+		end
+	end
+
+	define_compiler(MultiFileCompiler, :input_pattern => tag('.o'), :output_tag => 'executable') do
+		def output_name
+			@output_path + @project.name
+		end
+
+		def compile(infiles)
+			trace 'Linking'
+			libs = @project.global_context.get_attribute_set(:libs).map {|l| '-l' + l }
+			sh 'g++', '-g', libs, '-o', output_name, infiles.map {|f| f.path }
+		end
+	end
+
+else
+
+	define_compiler(SingleFileCompiler, :input_pattern => tag('.cpp') | tag('.c'), :dependency_pattern => tag('.hpp') | tag('.h'),
+						:output_name => 'cpp_compiler/%.bc') do
+		def compile(infile, outfile)
+			dfile = outfile.to_s.sub(/\.bc/, '.d')
+			check_optimized_dependencies(infile.path.to_s, dfile) do
+				trace "Compiling %s", make_relative(infile.path)
+				include_dirs = infile.context.get_attribute_set(:cpp_include_dir).map {|d| '-I' + make_relative(d) }
+				defines = infile.context.get_attribute_set(:cpp_define).map {|d| '-D' + d}
+				opt = []
+				opt = '-g' if tag('debug') === @project.build_tags
+				sh 'clang', '-emit-llvm', '-Wall', '-Werror', include_dirs, defines, '-MMD', opt, '-c', '-o', outfile, infile.path
+				create_optimized_dependencies(dfile)
+			end
+		end
+	end
+
+	define_compiler(MultiFileCompiler, :input_pattern => tag('.bc'), :output_tag => 'executable') do
+		def output_name
+			@output_path + @project.name
+		end
+
+		def compile(infiles)
+			trace 'Linking llvm files'
+			bc_file = @output_path + 'linked.bc'
+			sh 'llvm-link', '-f', '-o', bc_file, infiles
+			opt = []
+			unless @project.build_tags.include? 'debug'
+				trace 'optimizing llvm file'
+				sh 'opt', '-std-compile-opts', '-std-link-opts', '-f', '-o', bc_file, bc_file
+				opt = '-O3'
+			else
+				opt = '-O0'
+			end
+			s_file = @output_path + 'linked.s'
+			trace 'compiling llvm file'
+			sh 'llc', '-f', opt, '-o', s_file, bc_file
+			trace 'linking'
+			lib_dirs = @project.global_context.get_attribute_set(:lib_dir).map {|l| '-L' + l.path}
+			libs = @project.global_context.get_attribute_set(:libs).map {|l| '-l' + l }
+			o_file = @output_path + 'linked.o'
+			debug_symbols = []
+			debug_symbols = '-g' if @project.build_tags.include? 'debug'
+			sh 'g++', debug_symbols, lib_dirs, '-o', output_name, s_file, libs
+		end
+	end
+end
